@@ -3,18 +3,19 @@
 #include <time.h>
 #include <pthread.h>
 
+typedef struct pair_t {
+    float key;
+    int val;
+} pair_t;
+
 typedef struct thread_data_t {
     pair_t *localHeap;
     int start;
     int end;
     int k;
     int localHeapSize;
+    int localMaxSize;
 } thread_data_t;
-
-typedef struct pair_t {
-    float key;
-    int val;
-} pair_t;
 
 float *Input;
 pair_t *InputPair;
@@ -175,12 +176,15 @@ void verifyOutput(const float *Input, const pair_t *Output, int nTotalElmts, int
 void *thread_function(void *arg)
 {
     thread_data_t *data = (thread_data_t *)arg;
-    for (int i = data->start; i < data->end; i++) {
-        if (data->localHeapSize < data->k) {
+    for (int i = data->start; i < data->end; i++)
+    {
+        if (data->localHeapSize < data->k)
+        {
             insert(data->localHeap, &(data->localHeapSize), InputPair[i]);
-        } else if (InputPair[i].key < data->localHeap[0].key) {
+        }
+        else if (InputPair[i].key < data->localHeap[0].key)
+        {
             decreaseMax(data->localHeap, data->localHeapSize, InputPair[i]);
-            insert(data->localHeap, &(data->localHeapSize), InputPair[i]);
         }
     }
     return NULL;
@@ -191,41 +195,73 @@ void findKSmallest(int nTotalElements, int k, int nThreads)
     pthread_t threads[nThreads];
     thread_data_t thread_data[nThreads];
     int elementsPerThread = nTotalElements / nThreads;
-    pair_t *localHeaps = (pair_t *)malloc(nThreads * k * sizeof(pair_t));
+    // Get remainder
+    int remainder = nTotalElements % nThreads;
     
+    // Alocação individual para cada heap local
+    pair_t *localHeaps[nThreads];
+    for (int i = 0; i < nThreads; i++)
+    {
+        localHeaps[i] = (pair_t *)malloc(k * sizeof(pair_t));
+    }
+
     // Initialization and partitioning phase
-    for (int i = 0; i < nThreads; i++) {
-        thread_data[i].localHeap = &localHeaps[i * k];
-        thread_data[i].start = i * elementsPerThread;
-        thread_data[i].end = (i == nThreads - 1) ? nTotalElements : (i + 1) * elementsPerThread;
-        thread_data[i].k = k;
-        thread_data[i].localHeapSize = 0;
+    for (int i = 0; i < nThreads; i++)
+    {
+        if(i == 0)
+        {
+            thread_data[i].localHeap = localHeaps[i];
+            thread_data[i].start = i * elementsPerThread;
+            thread_data[i].end = (i + 1) * elementsPerThread + remainder;
+            thread_data[i].k = k;
+            thread_data[i].localHeapSize = 0;
+            thread_data[i].localMaxSize = k + remainder;
+        }
+        else
+        {
+            thread_data[i].localHeap = localHeaps[i];
+            thread_data[i].start = i * elementsPerThread;
+            thread_data[i].end = (i == nThreads - 1) ? nTotalElements : (i + 1) * elementsPerThread;
+            thread_data[i].k = k;
+            thread_data[i].localHeapSize = 0;
+            thread_data[i].localMaxSize = k;
+        }
 
         pthread_create(&threads[i], NULL, thread_function, &thread_data[i]);
     }
 
     // Wait for threads to finish
-    for (int i = 0; i < nThreads; i++) {
+    for (int i = 0; i < nThreads; i++)
+    {
         pthread_join(threads[i], NULL);
     }
 
     // Merging phase using Output variable
     int OutputSize = 0;
-    for (int i = 0; i < nThreads; i++) {
-        for (int j = 0; j < thread_data[i].localHeapSize; j++) {
-            if (OutputSize < k) {
-                insert(Output, &OutputSize, localHeaps[i * k + j]);
-            } else if (localHeaps[i * k + j].key < Output[0].key) {
-                decreaseMax(Output, OutputSize, localHeaps[i * k + j]);
-                insert(Output, &OutputSize, localHeaps[i * k + j]);
+    for (int i = 0; i < nThreads; i++)
+    {
+        for (int j = 0; j < thread_data[i].localHeapSize; j++)
+        {
+            if (OutputSize < k)
+            {
+                insert(Output, &OutputSize, localHeaps[i][j]);
+            }
+            else if (localHeaps[i][j].key < Output[0].key)
+            {
+                decreaseMax(Output, OutputSize, localHeaps[i][j]);
             }
         }
     }
 
-    free(localHeaps);
+    // Libera a memória para cada heap local
+    for (int i = 0; i < nThreads; i++)
+    {
+        free(localHeaps[i]);
+    }
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
     if (argc != 4)
     {
         printf("Usage: %s <nTotalElements> <k> <nThreads>\n", argv[0]);
@@ -236,6 +272,8 @@ int main(int argc, char *argv[]) {
     int nTotalElements = atoi(argv[1]);
     int k = atoi(argv[2]);
     int nThreads = atoi(argv[3]);
+    clock_t start, end;
+    double cpu_time_used;
 
     // Check the conditions
     if (nTotalElements <= 0)
@@ -275,7 +313,12 @@ int main(int argc, char *argv[]) {
         decreaseMax(Output, outputSize, InputPair[i]);
     }
 
+    start = clock();
     findKSmallest(nTotalElements, k, nThreads);
+    end = clock();
+
+    cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+    printf("Time elapsed: %f seconds\n", cpu_time_used);
 
     // Verify the output
     verifyOutput(Input, Output, nTotalElements, k);
