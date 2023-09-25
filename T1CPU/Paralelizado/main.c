@@ -38,6 +38,37 @@ int compare(const void *a, const void *b)
     return 0;
 }
 
+// Make a compare function that tests val and key
+int compare_verify(const void *p1, const void *p2)
+{
+    pair_t *a = (pair_t *)p1;
+    pair_t *b = (pair_t *)p2;
+
+    if(a->key == b->key)
+    {
+        return a->val - b->val;
+    }
+    else if(a->key < b->key)
+    {
+        return -1;
+    }
+    else
+    {
+        return 1;
+    }
+}
+
+// Comparison function for qsort
+int compare_pair(const void *a, const void *b)
+{
+    float floatA = ((pair_t *)a)->key;
+    float floatB = ((pair_t *)b)->key;
+
+    if (floatA < floatB) return -1;
+    if (floatA > floatB) return 1;
+    return 0;
+}
+
 void maxHeapify(pair_t heap[], int size, int i) {
     int largest = i;
     int left = 2 * i + 1;
@@ -67,7 +98,8 @@ void heapifyUp(pair_t heap[], int *size, int pos) {
     }
 }
 
-void insert(pair_t heap[], int *size, pair_t element) {
+void insert(pair_t heap[], int *size, pair_t element)
+{
     if (*size == 0) {
         heap[0] = element;
         (*size)++;
@@ -78,15 +110,8 @@ void insert(pair_t heap[], int *size, pair_t element) {
     }
 }
 
-int isMaxHeap(pair_t heap[], int size) {
-    for (int i = 0; i <= (size - 2) / 2; i++) {
-        if (heap[2 * i + 1].key > heap[i].key) return 0;
-        if (2 * i + 2 < size && heap[2 * i + 2].key > heap[i].key) return 0;
-    }
-    return 1;
-}
-
-void decreaseMax(pair_t heap[], int size, pair_t element) {
+void decreaseMax(pair_t heap[], int size, pair_t element)
+{
     if (size == 0) return;
 
     if (heap[0].key > element.key)
@@ -99,6 +124,8 @@ void decreaseMax(pair_t heap[], int size, pair_t element) {
 
 void fillArrayRandom(int nTotalElements)
 {
+    pair_t element;
+    int size = 0;
     for(int i = 0; i < nTotalElements; i++)
     {
         int a = rand();
@@ -107,8 +134,10 @@ void fillArrayRandom(int nTotalElements)
         float v = a * 100.0 + b;
         Input[i] = v;
 
-        InputPair[i].key = v;
-        InputPair[i].val = i;  // Store the corresponding index
+        element.key = v;
+        element.val = i;
+
+        insert(InputPair, &size, element);
     }
 }
 
@@ -120,11 +149,11 @@ int binary_search(pair_t *array, int size, pair_t target)
     while (low <= high)
     {
         int mid = (low + high) / 2;
-        if (compare(&target, &array[mid]) == 0)
+        if (compare_verify(&target, &array[mid]) == 0)
         {
             return mid;  // Target found
         }
-        else if (compare(&target, &array[mid]) < 0)
+        else if (compare_verify(&target, &array[mid]) < 0)
         {
             high = mid - 1;
         }
@@ -140,9 +169,11 @@ int binary_search(pair_t *array, int size, pair_t target)
 void verifyOutput(const float *Input, const pair_t *Output, int nTotalElmts, int k)
 {
     int ok = 1;
-    
+    pair_t Answers[k];
+
     // 1) Create an array I of pairs (key, value)
     pair_t *I = malloc(nTotalElmts * sizeof(pair_t));
+
     for(int i = 0; i < nTotalElmts; i++)
     {
         I[i].key = Input[i];
@@ -150,12 +181,19 @@ void verifyOutput(const float *Input, const pair_t *Output, int nTotalElmts, int
     }
 
     // 2) Sort the array I in ascending order
-    qsort(I, nTotalElmts, sizeof(pair_t), compare);
+    qsort(I, nTotalElmts, sizeof(pair_t), compare_pair);
+
+    // 3) Insert first k values of I into the Answers array
+    for (int i = 0; i < k; i++)
+    {
+        Answers[i].key = I[i].key;
+        Answers[i].val = I[i].val;
+    }
 
     // 3) For each pair (ki,vi) belonging to the Output array
     for (int i = 0; i < k; i++)
     {
-        if (binary_search(I, nTotalElmts, Output[i]) == -1)
+        if (binary_search(Answers, k, Output[i]) == -1)
         {
             ok = 0;
             break;
@@ -246,7 +284,7 @@ void findKSmallest(int nTotalElements, int k, int nThreads)
             {
                 insert(Output, &OutputSize, localHeaps[i][j]);
             }
-            else if (localHeaps[i][j].key < Output[0].key)
+            else
             {
                 decreaseMax(Output, OutputSize, localHeaps[i][j]);
             }
@@ -299,19 +337,6 @@ int main(int argc, char *argv[])
     InputPair = (pair_t *)malloc(nTotalElements * sizeof(pair_t));
     Output = (pair_t *)malloc(k * sizeof(pair_t));
     fillArrayRandom(nTotalElements);
-
-    // Do a for loop to insert k elements inside of Output
-    int outputSize = 0;
-    for (int i = 0; i < k; i++)
-    {
-        insert(Output, &outputSize, InputPair[i]);
-    }
-
-    // Now for the rest of the elements, do a decreaseMax if the element is smaller than the max
-    for (int i = k; i < nTotalElements; i++)
-    {
-        decreaseMax(Output, outputSize, InputPair[i]);
-    }
 
     start = clock();
     findKSmallest(nTotalElements, k, nThreads);
