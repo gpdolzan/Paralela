@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include <pthread.h>
 
 typedef struct pair_t {
     float key;
@@ -209,23 +208,6 @@ void verifyOutput(const float *Input, const pair_t *Output, int nTotalElmts, int
     }
 
     free(I);
-}
-
-void *thread_function(void *arg)
-{
-    thread_data_t *data = (thread_data_t *)arg;
-    for (int i = data->start; i < data->end; i++)
-    {
-        if (data->localHeapSize < data->k)
-        {
-            insert(data->localHeap, &(data->localHeapSize), InputPair[i]);
-        }
-        else if (InputPair[i].key < data->localHeap[0].key)
-        {
-            decreaseMax(data->localHeap, data->localHeapSize, InputPair[i]);
-        }
-    }
-    return NULL;
 }
 
 void findKSmallest(int nTotalElements, int k)

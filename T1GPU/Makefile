@@ -1,6 +1,6 @@
 # CUDA compiler and flags
 NVCC = nvcc
-NVCC_FLAGS = -O3 # Adjust the architecture as per your GPU
+NVCC_FLAGS = -O3 -rdc=true -lcudadevrt # Adjust the architecture as per your GPU
 
 # C compiler and flags (if you still have C code to compile)
 CC = gcc

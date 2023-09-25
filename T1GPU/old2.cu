@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include <pthread.h>
+#include <cuda_runtime.h>
 
 typedef struct pair_t {
     float key;
@@ -17,7 +17,6 @@ typedef struct thread_data_t {
     int localMaxSize;
 } thread_data_t;
 
-long long totalOperations = 0;
 float *Input;
 pair_t *InputPair;
 pair_t *Output;
@@ -101,7 +100,6 @@ void heapifyUp(pair_t heap[], int *size, int pos) {
 
 void insert(pair_t heap[], int *size, pair_t element)
 {
-    __atomic_fetch_add(&totalOperations, 1, __ATOMIC_RELAXED);
     if (*size == 0) {
         heap[0] = element;
         (*size)++;
@@ -114,7 +112,6 @@ void insert(pair_t heap[], int *size, pair_t element)
 
 void decreaseMax(pair_t heap[], int size, pair_t element)
 {
-    __atomic_fetch_add(&totalOperations, 1, __ATOMIC_RELAXED);
     if (size == 0) return;
 
     if (heap[0].key > element.key)
@@ -175,7 +172,7 @@ void verifyOutput(const float *Input, const pair_t *Output, int nTotalElmts, int
     pair_t Answers[k];
 
     // 1) Create an array I of pairs (key, value)
-    pair_t *I = malloc(nTotalElmts * sizeof(pair_t));
+    pair_t *I = (pair_t *)malloc(nTotalElmts * sizeof(pair_t));
 
     for(int i = 0; i < nTotalElmts; i++)
     {
@@ -231,91 +228,178 @@ void *thread_function(void *arg)
     return NULL;
 }
 
-void findKSmallest(int nTotalElements, int k, int nThreads)
+__device__ void swapDevice(pair_t *a, pair_t *b) {
+    pair_t temp = *a;
+    *a = *b;
+    *b = temp;
+}
+
+__device__ void maxHeapifyDevice(pair_t heap[], int size, int i) {
+    int largest = i;
+    int left = 2 * i + 1;
+    int right = 2 * i + 2;
+
+    while (i < size) {
+        largest = i;
+
+        if (left < size && heap[left].key > heap[largest].key)
+            largest = left;
+
+        if (right < size && heap[right].key > heap[largest].key)
+            largest = right;
+
+        if (largest == i)
+            break;
+
+        swapDevice(&heap[i], &heap[largest]);
+        i = largest;
+        left = 2 * i + 1;
+        right = 2 * i + 2;
+    }
+}
+
+__device__ void heapifyUpDevice(pair_t heap[], int pos) {
+    int parent = (pos - 1) / 2;
+
+    while (pos > 0 && heap[parent].key < heap[pos].key) {
+        swapDevice(&heap[parent], &heap[pos]);
+        pos = parent;
+        parent = (pos - 1) / 2;
+    }
+}
+
+__device__ void insertDevice(pair_t heap[], int *size, pair_t element)
 {
-    pthread_t threads[nThreads];
-    thread_data_t thread_data[nThreads];
-    int elementsPerThread = nTotalElements / nThreads;
-    // Get remainder
-    int remainder = nTotalElements % nThreads;
+    if (*size == 0) {
+        heap[0] = element;
+        (*size)++;
+    } else {
+        heap[*size] = element;
+        (*size)++;
+        heapifyUpDevice(heap, *size - 1);
+    }
+}
+
+__device__ void decreaseMaxDevice(pair_t heap[], int size, pair_t element)
+{
+    if (size == 0) return;
+
+    if (heap[0].key > element.key)
+    {
+        heap[0].key = element.key;
+        heap[0].val = element.val;
+        maxHeapifyDevice(heap, size, 0);
+    }
+}
+
+__global__ void findKSmallestKernel(pair_t *InputPair, pair_t *d_intermediateResults, int nTotalElements, int k)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
     
-    // Alocação individual para cada heap local
-    pair_t *localHeaps[nThreads];
-    for (int i = 0; i < nThreads; i++)
-    {
-        localHeaps[i] = (pair_t *)malloc(k * sizeof(pair_t));
-    }
+    extern __shared__ pair_t sharedMemory[];
+    pair_t* localHeap = &sharedMemory[threadIdx.x * k];
 
-    // Initialization and partitioning phase
-    for (int i = 0; i < nThreads; i++)
+    int localHeapSize = 0;
+
+    for (int i = idx; i < nTotalElements; i += stride)
     {
-        if(i == 0)
+        if (localHeapSize < k)
         {
-            thread_data[i].localHeap = localHeaps[i];
-            thread_data[i].start = i * elementsPerThread;
-            thread_data[i].end = (i + 1) * elementsPerThread + remainder;
-            thread_data[i].k = k;
-            thread_data[i].localHeapSize = 0;
-            thread_data[i].localMaxSize = k + remainder;
+            insertDevice(localHeap, &localHeapSize, InputPair[i]);
         }
-        else
+        else if (InputPair[i].key < localHeap[0].key)
         {
-            thread_data[i].localHeap = localHeaps[i];
-            thread_data[i].start = i * elementsPerThread;
-            thread_data[i].end = (i == nThreads - 1) ? nTotalElements : (i + 1) * elementsPerThread;
-            thread_data[i].k = k;
-            thread_data[i].localHeapSize = 0;
-            thread_data[i].localMaxSize = k;
+            decreaseMaxDevice(localHeap, localHeapSize, InputPair[i]);
         }
-
-        pthread_create(&threads[i], NULL, thread_function, &thread_data[i]);
     }
 
-    // Wait for threads to finish
-    for (int i = 0; i < nThreads; i++)
+    // Write local heap results to global intermediate results.
+    for (int i = 0; i < k; i++)
     {
-        pthread_join(threads[i], NULL);
+        d_intermediateResults[idx * k + i] = localHeap[i];
     }
+}
 
-    // Merging phase using Output variable
-    int OutputSize = 0;
-    for (int i = 0; i < nThreads; i++)
+__global__ void mergeKSmallestKernel(pair_t *d_intermediateResults, pair_t *d_Output, int k, int totalThreads, int numBlocks)
+{
+    // One block will handle the merging. Each thread in the block will handle one value.
+    extern __shared__ pair_t sharedHeap[];
+
+    int idx = threadIdx.x;
+
+    // Each thread in this block will insert elements from all the intermediate heaps.
+    for (int i = 0; i < min(numBlocks, k); i++)
     {
-        for (int j = 0; j < thread_data[i].localHeapSize; j++)
+        if (idx < k)
         {
-            if (OutputSize < k)
+            pair_t currentPair = d_intermediateResults[i * k + idx];
+
+            if (idx == 0)
             {
-                insert(Output, &OutputSize, localHeaps[i][j]);
+                // Initialize the shared heap
+                for (int j = 0; j < k; j++)
+                {
+                    sharedHeap[j] = currentPair;
+                }
             }
             else
             {
-                decreaseMax(Output, OutputSize, localHeaps[i][j]);
+                if (currentPair.key < sharedHeap[0].key)
+                {
+                    sharedHeap[0] = currentPair;
+                    maxHeapifyDevice(sharedHeap, k, 0);
+                }
             }
         }
+        __syncthreads();
     }
 
-    // Libera a memória para cada heap local
-    for (int i = 0; i < nThreads; i++)
+    // The sharedHeap now has the k smallest values.
+    if (idx < k)
     {
-        free(localHeaps[i]);
+        d_Output[idx] = sharedHeap[idx];
     }
+}
+
+void findKSmallest(int nTotalElements, int k)
+{
+    int blockSize = min(k, 256);
+    int numBlocks = (nTotalElements + blockSize - 1) / blockSize;
+
+    pair_t *d_InputPair, *d_intermediateResults, *d_Output;
+
+    cudaMalloc(&d_InputPair, nTotalElements * sizeof(pair_t));
+    cudaMalloc(&d_intermediateResults, numBlocks * blockSize * k * sizeof(pair_t));
+    cudaMalloc(&d_Output, k * sizeof(pair_t));
+
+    cudaMemcpy(d_InputPair, InputPair, nTotalElements * sizeof(pair_t), cudaMemcpyHostToDevice);
+
+    findKSmallestKernel<<<numBlocks, blockSize>>>(d_InputPair, d_intermediateResults, nTotalElements, k);
+
+    // Now merge the results.
+    mergeKSmallestKernel<<<1, k, numBlocks * k * sizeof(pair_t)>>>(d_intermediateResults, d_Output, k, numBlocks);
+
+    cudaMemcpy(Output, d_Output, k * sizeof(pair_t), cudaMemcpyDeviceToHost);
+
+    cudaFree(d_InputPair);
+    cudaFree(d_intermediateResults);
+    cudaFree(d_Output);
 }
 
 int main(int argc, char *argv[])
 {
-    if (argc != 4)
+    if (argc != 3)
     {
-        printf("Usage: %s <nTotalElements> <k> <nThreads>\n", argv[0]);
+        printf("Usage: %s <nTotalElements> <k>\n", argv[0]);
         return 1;
     }
 
     // Convert the arguments from strings to integers
     int nTotalElements = atoi(argv[1]);
     int k = atoi(argv[2]);
-    int nThreads = atoi(argv[3]);
     clock_t start, end;
     double cpu_time_used;
-    double MOPs;
 
     // Check the conditions
     if (nTotalElements <= 0)
@@ -330,12 +414,6 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    if (nThreads < 1 || nThreads > 8)
-    {
-        printf("Error: nThreads must be between 1 and 8 (inclusive).\n");
-        return 1;
-    }
-
     // Program can begin
     Input = (float *)malloc(nTotalElements * sizeof(float));
     InputPair = (pair_t *)malloc(nTotalElements * sizeof(pair_t));
@@ -343,13 +421,11 @@ int main(int argc, char *argv[])
     fillArrayRandom(nTotalElements);
 
     start = clock();
-    findKSmallest(nTotalElements, k, nThreads);
+    findKSmallest(nTotalElements, k);
     end = clock();
 
     cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-    MOPs = (double)totalOperations / cpu_time_used * 1e-6;
-    printf("Time elapsed: %f seconds\n", cpu_time_used);
-    printf("MOPs: %f\n", MOPs);
+    printf("Time elapsed: %f seconds", cpu_time_used);
 
     // Verify the output
     verifyOutput(Input, Output, nTotalElements, k);
