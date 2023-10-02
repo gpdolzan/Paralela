@@ -356,8 +356,8 @@ int main(int argc, char *argv[])
     double MOPs;
 
     // Print the input arguments in one line
-    printf("=========================================\n");
-    printf("Elementos: %d\nK: %d\nThreads: %d\n", nTotalElements, k, nThreads);
+    //printf("=========================================\n");
+    //printf("Elementos: %d\nK: %d\nThreads: %d\n", nTotalElements, k, nThreads);
 
     // Check the conditions
     if (nTotalElements <= 0)
@@ -394,11 +394,11 @@ int main(int argc, char *argv[])
     double total_time_in_seconds = (double) chrono_gettotal(&chronometer) / 1000000000.0;
     MOPs = (double)nTotalElements / (double) chrono_gettotal(&chronometer);
     printf("Tempo: %lf segundos\n", total_time_in_seconds);
-    printf("Throughput: %lf\n", MOPs);
+    //printf("Throughput: %lf\n", MOPs);
 
     // Verify the output
     verifyOutput(Input, Output, nTotalElements, k);
-    printf("=========================================\n");
+    //printf("=========================================\n");
 
     free(Input);
     free(InputPair);

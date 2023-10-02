@@ -1,6 +1,6 @@
 # Opções de compilação e ligação
 CFLAGS = -Wall -g -O3
-LDLIBS = -lm -lpthread -ltime
+LDLIBS = -lm -lpthread
 
 # Lista de objetos
 objs_acharKMenores = main.o chrono.o
@@ -11,7 +11,7 @@ all: acharKMenores media
 
 # Regra para criar o executável
 acharKMenores: $(objs_acharKMenores)
-	gcc $(CFLAGS) -o acharKMenores $(objs_acharKMenores)
+	gcc $(CFLAGS) -o acharKMenores $(objs_acharKMenores) $(LDLIBS)
 
 media: $(objs_media)
 	gcc $(CFLAGS) -o media $(objs_media)
