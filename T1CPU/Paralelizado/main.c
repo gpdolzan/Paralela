@@ -18,7 +18,6 @@ typedef struct thread_data_t {
     int localMaxSize;
 } thread_data_t;
 
-long long totalOperations = 0;
 float *Input;
 pair_t *InputPair;
 pair_t *Output;
@@ -102,7 +101,6 @@ void heapifyUp(pair_t heap[], int *size, int pos) {
 
 void insert(pair_t heap[], int *size, pair_t element)
 {
-    __atomic_fetch_add(&totalOperations, 1, __ATOMIC_RELAXED);
     if (*size == 0) {
         heap[0] = element;
         (*size)++;
@@ -115,7 +113,6 @@ void insert(pair_t heap[], int *size, pair_t element)
 
 void decreaseMax(pair_t heap[], int size, pair_t element)
 {
-    __atomic_fetch_add(&totalOperations, 1, __ATOMIC_RELAXED);
     if (size == 0) return;
 
     if (heap[0].key > element.key)
@@ -353,7 +350,7 @@ int main(int argc, char *argv[])
     chrono_stop(&chronometer);
 
     double total_time_in_seconds = (double) chrono_gettotal(&chronometer) / 1000000000.0;
-    MOPs = (double)totalOperations / (double) chrono_gettotal(&chronometer);
+    MOPs = (double)nTotalElements / (double) chrono_gettotal(&chronometer);
     printf("Tempo: %lf segundos\n", total_time_in_seconds);
     printf("Throughput: %lf\n", MOPs);
 
