@@ -33,6 +33,8 @@ TIME_ARRAY=()
 THROUGHPUT_ARRAY=()
 
 echo "Numero de repeticoes: $NREPETICOES" > $ARQLOG
+echo "Numero de elementos: $NELEMENTOS" >> $ARQLOG
+echo "Numero de elementos a serem encontrados: $K" >> $ARQLOG
 
 if [[ -x "./acharKMenores" ]]; then
     for i in {1..8}; do
@@ -49,8 +51,8 @@ if [[ -x "./acharKMenores" ]]; then
         echo "Numero de Threads: $i" >> $ARQLOG
         echo "TIME_ARRAY:${TIME_ARRAY[*]}" >> $ARQLOG
         echo "THROUGHPUT_ARRAY:${THROUGHPUT_ARRAY[*]}" >> $ARQLOG
-        echo "$(./media "$NREPETICOES" "${TIME_ARRAY[@]}")" >> $ARQLOG
-        echo "$(./media "$NREPETICOES" "${THROUGHPUT_ARRAY[@]}")" >> $ARQLOG
+        echo "Media tempo de execucao: $(./media "$NREPETICOES" "${TIME_ARRAY[@]}")" >> $ARQLOG
+        echo "Media vazao: $(./media "$NREPETICOES" "${THROUGHPUT_ARRAY[@]}")" >> $ARQLOG
         echo "" >> $ARQLOG
 
         # Reset the arrays
