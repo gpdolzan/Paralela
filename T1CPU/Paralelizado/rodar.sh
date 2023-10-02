@@ -36,8 +36,6 @@ echo "Numero de repeticoes: $NREPETICOES" > $ARQLOG
 
 if [[ -x "./acharKMenores" ]]; then
     for i in {1..8}; do
-        SUM_TIME=0
-        SUM_THROUGHPUT=0
         echo "Running 'acharKMenores' $NREPETICOES times with $i threads..."
         for j in $(seq 1 $NREPETICOES); do
             OUTPUT=$(./acharKMenores $NELEMENTOS $K $i)
@@ -46,10 +44,6 @@ if [[ -x "./acharKMenores" ]]; then
 
             TIME_ARRAY+=("$TIME")
             THROUGHPUT_ARRAY+=("$THROUGHPUT")
-
-            # Sum time and throughput
-            SUM_TIME=$(echo "$SUM_TIME + $TIME" | bc -l)
-            SUM_THROUGHPUT=$(echo "$SUM_THROUGHPUT + $THROUGHPUT" | bc -l)
         done
 
         echo "Numero de Threads: $i" >> $ARQLOG
