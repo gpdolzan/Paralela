@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <pthread.h>
+#include "chrono.h"
 
 typedef struct pair_t {
     float key;
@@ -313,9 +314,11 @@ int main(int argc, char *argv[])
     int nTotalElements = atoi(argv[1]);
     int k = atoi(argv[2]);
     int nThreads = atoi(argv[3]);
-    clock_t start, end;
-    double cpu_time_used;
     double MOPs;
+
+    // Print the input arguments in one line
+    printf("=========================================\n");
+    printf("Elementos: %d\nK: %d\nThreads: %d\n", nTotalElements, k, nThreads);
 
     // Check the conditions
     if (nTotalElements <= 0)
@@ -342,17 +345,21 @@ int main(int argc, char *argv[])
     Output = (pair_t *)malloc(k * sizeof(pair_t));
     fillArrayRandom(nTotalElements);
 
-    start = clock();
+    // Use chrono.h to measure the execution time
+    chronometer_t chronometer;
+    chrono_reset(&chronometer);
+    chrono_start(&chronometer);
     findKSmallest(nTotalElements, k, nThreads);
-    end = clock();
+    chrono_stop(&chronometer);
 
-    cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-    MOPs = (double)totalOperations / cpu_time_used * 1e-6;
-    printf("Time elapsed: %f seconds\n", cpu_time_used);
-    printf("MOPs: %f\n", MOPs);
+    double total_time_in_seconds = (double) chrono_gettotal(&chronometer) / 1000000000.0;
+    MOPs = (double)totalOperations / (double) chrono_gettotal(&chronometer);
+    printf("Tempo: %lf segundos\n", total_time_in_seconds);
+    printf("Throughput: %lf\n", MOPs);
 
     // Verify the output
     verifyOutput(Input, Output, nTotalElements, k);
+    printf("=========================================\n");
 
     free(Input);
     free(InputPair);

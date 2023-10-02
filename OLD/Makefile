@@ -3,18 +3,14 @@ CFLAGS = -Wall -g -O3
 LDLIBS = -lm -lpthread -ltime
 
 # Lista de objetos
-objs_acharKMenores = main.o chrono.o
-objs_media = media.o
+objs = main.o chrono.o
 
 # Alvo padrão
-all: acharKMenores media
+all: acharKMenores
 
 # Regra para criar o executável
-acharKMenores: $(objs_acharKMenores)
-	gcc $(CFLAGS) -o acharKMenores $(objs_acharKMenores)
-
-media: $(objs_media)
-	gcc $(CFLAGS) -o media $(objs_media)
+acharKMenores: $(objs)
+	gcc $(CFLAGS) -o acharKMenores $(objs)
 
 # Regra para compilar os objetos
 %.o: %.c
@@ -22,9 +18,8 @@ media: $(objs_media)
 
 # Regra para limpar arquivos temporários
 clean:
-	-rm -f $(objs_acharKMenores) *~
-	-rm -f $(objs_media) *~
+	-rm -f $(objs) *~
 
 # Regra para limpar tudo (objetos e executável)
 purge: clean
-	-rm -f acharKMenores media
+	-rm -f acharKMenores
