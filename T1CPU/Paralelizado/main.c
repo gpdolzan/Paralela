@@ -18,6 +18,8 @@ typedef struct thread_data_t {
     int localMaxSize;
 } thread_data_t;
 
+int OutputSize = 0;
+pthread_mutex_t mergeMutex;
 float *Input;
 pair_t *InputPair;
 pair_t *Output;
@@ -229,6 +231,27 @@ void *thread_function(void *arg)
     return NULL;
 }
 
+void *merge_function(void *arg)
+{
+    thread_data_t *data = (thread_data_t *)arg;
+    for (int i = 0; i < data->localHeapSize; i++)
+    {
+        pthread_mutex_lock(&mergeMutex);
+
+        if (OutputSize < data->k)
+        {
+            insert(Output, &OutputSize, data->localHeap[i]);
+        }
+        else if (data->localHeap[i].key < Output[0].key)
+        {
+            decreaseMax(Output, OutputSize, data->localHeap[i]);
+        }
+
+        pthread_mutex_unlock(&mergeMutex);
+    }
+    return NULL;
+}
+
 void findKSmallest(int nTotalElements, int k, int nThreads)
 {
     pthread_t threads[nThreads];
@@ -275,8 +298,27 @@ void findKSmallest(int nTotalElements, int k, int nThreads)
         pthread_join(threads[i], NULL);
     }
 
+    // Initialization of mutex for merge phase
+    pthread_mutex_init(&mergeMutex, NULL);
+
+    // Merging phase using Output variable and threads
+    pthread_t merge_threads[nThreads];
+    for (int i = 0; i < nThreads; i++)
+    {
+        pthread_create(&merge_threads[i], NULL, merge_function, &thread_data[i]);
+    }
+
+    // Wait for merge threads to finish
+    for (int i = 0; i < nThreads; i++)
+    {
+        pthread_join(merge_threads[i], NULL);
+    }
+
+    // Destroy the mutex after using
+    pthread_mutex_destroy(&mergeMutex);
+
     // Merging phase using Output variable
-    int OutputSize = 0;
+    /*int OutputSize = 0;
     for (int i = 0; i < nThreads; i++)
     {
         for (int j = 0; j < thread_data[i].localHeapSize; j++)
@@ -290,7 +332,7 @@ void findKSmallest(int nTotalElements, int k, int nThreads)
                 decreaseMax(Output, OutputSize, localHeaps[i][j]);
             }
         }
-    }
+    }*/
 
     // Libera a memória para cada heap local
     for (int i = 0; i < nThreads; i++)
